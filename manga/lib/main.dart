@@ -93,17 +93,17 @@ class BrowseMangaScreen extends StatelessWidget {
               crossAxisSpacing: 16,
               children: [
                 _MangaCard(
-                  image: 'assets/shadows_embrace.png',
+                  image: 'assets/anya.png',
                   title: "The Shadow's Embr...",
                   subtitle: "A tale of mystery",
                 ),
                 _MangaCard(
-                  image: 'assets/crimson_echoes.png',
+                  image: 'assets/izumi.png',
                   title: "Crimson Echoes",
                   subtitle: "A thrilling adventure",
                 ),
                 _MangaCard(
-                  image: 'assets/whispers_past.png',
+                  image: 'assets/naruto.png',
                   title: "Whispers of the Past",
                   subtitle: "Unraveling secrets",
                 ),
@@ -112,30 +112,34 @@ class BrowseMangaScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: const Color(0xFF181828),
-        selectedItemColor: Colors.blueAccent,
-        unselectedItemColor: Colors.white54,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Browse',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bookmark),
-            label: 'Library',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications),
-            label: 'Updates',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-        currentIndex: 0,
-        onTap: (index) {},
+      bottomNavigationBar: Container(
+        color: const Color(0xFF181828),
+        child: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.transparent,
+          selectedItemColor: Colors.blueAccent,
+          unselectedItemColor: Colors.white54,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home),
+              label: 'Browse',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bookmark),
+              label: 'Library',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.notifications),
+              label: 'Updates',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings),
+              label: 'Settings',
+            ),
+          ],
+          currentIndex: 0,
+          onTap: (index) {},
+        ),
       ),
     );
   }
