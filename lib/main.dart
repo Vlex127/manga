@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'library.dart'; // Make sure this file exists and exports LibraryScreen
+import 'library.dart';
+import 'settings.dart';
+import 'updates.dart';
 
 void main() {
   runApp(const MyApp());
@@ -30,9 +32,8 @@ class _MainNavigationState extends State<MainNavigation> {
   final List<Widget> _screens = [
     const BrowseMangaScreen(),
     const LibraryScreen(),
-    // Add other screens if needed
-    Center(child: Text('Updates', style: TextStyle(color: Colors.white))),
-    Center(child: Text('Settings', style: TextStyle(color: Colors.white))),
+    const UpdatesScreen(),
+    const SettingsScreen(),
   ];
 
   @override
@@ -45,17 +46,23 @@ class _MainNavigationState extends State<MainNavigation> {
         backgroundColor: const Color(0xFF181828),
         selectedItemColor: Colors.blueAccent,
         unselectedItemColor: Colors.white54,
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home),
+            icon: Icon(Icons.search),
             label: 'Browse',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.bookmark),
+            icon: Icon(Icons.bookmark_border),
             label: 'Library',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.notifications),
+            icon: Icon(Icons.notifications_none),
             label: 'Updates',
           ),
           BottomNavigationBarItem(
@@ -63,12 +70,6 @@ class _MainNavigationState extends State<MainNavigation> {
             label: 'Settings',
           ),
         ],
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
       ),
     );
   }
@@ -170,7 +171,7 @@ class BrowseMangaScreen extends StatelessWidget {
           ],
         ),
       ),
-       );
+    );
   }
 }
 
