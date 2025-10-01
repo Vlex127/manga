@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'library.dart';
 import 'settings.dart';
 import 'updates.dart';
@@ -78,6 +80,18 @@ class _MainNavigationState extends State<MainNavigation> {
 class BrowseMangaScreen extends StatelessWidget {
   const BrowseMangaScreen({super.key});
 
+  Future<List<Manga>> fetchLatestManga() async {
+    final url = Uri.parse('https://api.mangadex.org/manga?limit=10&order[latestUploadedChapter]=desc&includes[]=cover_art');
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final List mangaList = data['data'];
+      return mangaList.map((m) => Manga.fromJson(m)).toList();
+    } else {
+      throw Exception('Failed to load manga');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -124,7 +138,7 @@ class BrowseMangaScreen extends StatelessWidget {
               height: 40,
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                children: [
+                children: const [
                   _GenreChip('Shonen', selected: true),
                   _GenreChip('Shojo'),
                   _GenreChip('Seinen'),
@@ -135,7 +149,7 @@ class BrowseMangaScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             const Text(
-              'For You',
+              'Latest Manga',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 22,
@@ -143,34 +157,67 @@ class BrowseMangaScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 0.7,
-              mainAxisSpacing: 20,
-              crossAxisSpacing: 16,
-              children: [
-                _MangaCard(
-                  image: 'assets/anya.png',
-                  title: "The Shadow's Embr...",
-                  subtitle: "A tale of mystery",
-                ),
-                _MangaCard(
-                  image: 'assets/izumi.png',
-                  title: "Crimson Echoes",
-                  subtitle: "A thrilling adventure",
-                ),
-                _MangaCard(
-                  image: 'assets/naruto.png',
-                  title: "Whispers of the Past",
-                  subtitle: "Unraveling secrets",
-                ),
-              ],
+            FutureBuilder<List<Manga>>(
+              future: fetchLatestManga(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasError) {
+                  return Center(child: Text('Failed to load manga', style: TextStyle(color: Colors.white)));
+                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return Center(child: Text('No manga found', style: TextStyle(color: Colors.white)));
+                }
+                final mangaList = snapshot.data!;
+                return GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  childAspectRatio: 0.7,
+                  mainAxisSpacing: 20,
+                  crossAxisSpacing: 16,
+                  children: mangaList.map((manga) => _MangaCard(
+                    image: manga.coverUrl,
+                    title: manga.title,
+                    subtitle: manga.status,
+                  )).toList(),
+                );
+              },
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class Manga {
+  final String id;
+  final String title;
+  final String status;
+  final String coverUrl;
+
+  Manga({required this.id, required this.title, required this.status, required this.coverUrl});
+
+  factory Manga.fromJson(Map<String, dynamic> json) {
+    final id = json['id'] as String;
+    final attributes = json['attributes'] ?? {};
+    final titleMap = attributes['title'] ?? {};
+    final title = titleMap.values.isNotEmpty ? titleMap.values.first : 'No Title';
+    final status = attributes['status'] ?? '';
+    String coverUrl = '';
+    if (json['relationships'] != null) {
+      for (var rel in json['relationships']) {
+        if (rel['type'] == 'cover_art') {
+          final fileName = rel['attributes']?['fileName'] ?? '';
+          coverUrl = 'https://uploads.mangadex.org/covers/$id/$fileName.256.jpg';
+        }
+      }
+    }
+    return Manga(
+      id: id,
+      title: title,
+      status: status,
+      coverUrl: coverUrl,
     );
   }
 }
@@ -208,12 +255,23 @@ class _MangaCard extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: Image.asset(
-            image,
-            height: 160,
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
+          child: image.isNotEmpty
+              ? Image.network(
+                  image,
+                  height: 160,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 160,
+                    color: Colors.grey.shade800,
+                    child: const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+                  ),
+                )
+              : Container(
+                  height: 160,
+                  color: Colors.grey.shade800,
+                  child: const Center(child: Icon(Icons.broken_image, color: Colors.white54)),
+                ),
         ),
         const SizedBox(height: 12),
         Text(
