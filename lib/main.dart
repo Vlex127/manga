@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'dart:async';
 import 'library.dart';
 import 'settings.dart';
 import 'updates.dart';
+import 'models.dart';
+import 'manga_service.dart';
+import 'bookmarks_repository.dart';
 
 void main() {
   runApp(const MyApp());
@@ -107,12 +109,14 @@ class _BrowseMangaScreenState extends State<BrowseMangaScreen> with AutomaticKee
   Future<List<Manga>>? mangaFuture;
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final MangaService _mangaService = MangaService();
   bool _isSearching = false;
   bool _isLoadingMore = false;
   int _currentPage = 0;
   List<Manga> _allManga = [];
   bool _hasMore = true;
   String _sortBy = 'latestUploadedChapter';
+  Timer? _debounce;
 
   @override
   bool get wantKeepAlive => true;
@@ -132,7 +136,7 @@ class _BrowseMangaScreenState extends State<BrowseMangaScreen> with AutomaticKee
       _currentPage = 0;
       _allManga = [];
       _hasMore = true;
-      mangaFuture = fetchMangaByGenre(selectedGenre, 0);
+      mangaFuture = _mangaService.getMangaPage(page: 0, sortBy: _sortBy);
     });
   }
 
@@ -153,7 +157,7 @@ class _BrowseMangaScreenState extends State<BrowseMangaScreen> with AutomaticKee
     });
 
     try {
-      final newManga = await fetchMangaByGenre(selectedGenre, _currentPage + 1);
+      final newManga = await _mangaService.getMangaPage(page: _currentPage + 1, sortBy: _sortBy);
       setState(() {
         _currentPage++;
         _allManga.addAll(newManga);
@@ -173,50 +177,12 @@ class _BrowseMangaScreenState extends State<BrowseMangaScreen> with AutomaticKee
   void dispose() {
     _searchController.dispose();
     _scrollController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
-  Future<List<Manga>> fetchMangaByGenre(String genre, int page) async {
-    try {
-      final offset = page * 20;
-      final url = Uri.parse(
-        'https://api.mangadex.org/manga?limit=20&offset=$offset&order[$_sortBy]=desc&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&hasAvailableChapters=true'
-      );
-      
-      final response = await http.get(url);
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List mangaList = data['data'];
-        return mangaList.map((m) => Manga.fromJson(m)).toList();
-      } else {
-        throw Exception('Failed to load manga');
-      }
-    } catch (e) {
-      throw Exception('Error fetching manga: $e');
-    }
-  }
-
   Future<List<Manga>> searchManga(String query) async {
-    if (query.isEmpty) return [];
-    
-    try {
-      final url = Uri.parse(
-        'https://api.mangadex.org/manga?title=$query&limit=20&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive'
-      );
-      
-      final response = await http.get(url);
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List mangaList = data['data'];
-        return mangaList.map((m) => Manga.fromJson(m)).toList();
-      } else {
-        throw Exception('Failed to search manga');
-      }
-    } catch (e) {
-      throw Exception('Error searching manga: $e');
-    }
+    return _mangaService.search(query);
   }
 
   void onGenreSelected(String genre) {
@@ -244,6 +210,13 @@ class _BrowseMangaScreenState extends State<BrowseMangaScreen> with AutomaticKee
         mangaFuture = searchManga(query);
       });
     }
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      onSearch(value);
+    });
   }
 
   void _showSortOptions() {
@@ -449,7 +422,7 @@ class _BrowseMangaScreenState extends State<BrowseMangaScreen> with AutomaticKee
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: TextField(
                 controller: _searchController,
-                onSubmitted: onSearch,
+                onChanged: _onSearchChanged,
                 decoration: InputDecoration(
                   hintText: 'Search manga',
                   hintStyle: const TextStyle(color: Colors.white54),
@@ -518,7 +491,20 @@ class _BrowseMangaScreenState extends State<BrowseMangaScreen> with AutomaticKee
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: FutureBuilder<List<Manga>>(
+              child: RefreshIndicator(
+                color: Colors.blueAccent,
+                backgroundColor: const Color(0xFF23233A),
+                onRefresh: () async {
+                  if (_isSearching) {
+                    setState(() {
+                      mangaFuture = searchManga(_searchController.text);
+                    });
+                  } else {
+                    _loadInitialManga();
+                  }
+                  await (mangaFuture ?? Future.value([]));
+                },
+                child: FutureBuilder<List<Manga>>(
                 future: mangaFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting && _allManga.isEmpty) {
@@ -636,13 +622,38 @@ class _BrowseMangaScreenState extends State<BrowseMangaScreen> with AutomaticKee
   }
 }
 
-class MangaDetailsScreen extends StatelessWidget {
+class MangaDetailsScreen extends StatefulWidget {
   final Manga manga;
 
   const MangaDetailsScreen({super.key, required this.manga});
 
   @override
+  State<MangaDetailsScreen> createState() => _MangaDetailsScreenState();
+}
+
+class _MangaDetailsScreenState extends State<MangaDetailsScreen> {
+  final BookmarksRepository _repo = BookmarksRepository();
+  bool _bookmarked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final isBm = await _repo.isBookmarked(widget.manga.id);
+    if (mounted) setState(() => _bookmarked = isBm);
+  }
+
+  Future<void> _toggle() async {
+    await _repo.toggleBookmark(widget.manga);
+    if (mounted) setState(() => _bookmarked = !_bookmarked);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final manga = widget.manga;
     return Scaffold(
       backgroundColor: const Color(0xFF181828),
       body: CustomScrollView(
@@ -676,6 +687,13 @@ class MangaDetailsScreen extends StatelessWidget {
                 ],
               ),
             ),
+            actions: [
+              IconButton(
+                onPressed: _toggle,
+                icon: Icon(_bookmarked ? Icons.bookmark : Icons.bookmark_border),
+                color: Colors.white,
+              ),
+            ],
           ),
           SliverToBoxAdapter(
             child: Padding(
@@ -726,8 +744,8 @@ class MangaDetailsScreen extends StatelessWidget {
                       ),
                       const SizedBox(width: 12),
                       IconButton(
-                        onPressed: () {},
-                        icon: const Icon(Icons.bookmark_border),
+                        onPressed: _toggle,
+                        icon: Icon(_bookmarked ? Icons.bookmark : Icons.bookmark_border),
                         color: Colors.white,
                         style: IconButton.styleFrom(
                           backgroundColor: const Color(0xFF23233A),
@@ -832,64 +850,7 @@ class MangaDetailsScreen extends StatelessWidget {
   }
 }
 
-class Manga {
-  final String id;
-  final String title;
-  final String status;
-  final String coverUrl;
-  final String description;
-
-  Manga({
-    required this.id,
-    required this.title,
-    required this.status,
-    required this.coverUrl,
-    required this.description,
-  });
-
-  factory Manga.fromJson(Map<String, dynamic> json) {
-    final id = json['id'] as String;
-    final attributes = json['attributes'] ?? {};
-    final titleMap = attributes['title'] ?? {};
-    
-    String title = 'No Title';
-    if (titleMap.containsKey('en')) {
-      title = titleMap['en'];
-    } else if (titleMap.values.isNotEmpty) {
-      title = titleMap.values.first;
-    }
-    
-    final status = attributes['status'] ?? 'Unknown';
-    
-    final descMap = attributes['description'] ?? {};
-    String description = '';
-    if (descMap.containsKey('en')) {
-      description = descMap['en'];
-    } else if (descMap.values.isNotEmpty) {
-      description = descMap.values.first;
-    }
-    
-    String coverUrl = '';
-    if (json['relationships'] != null) {
-      for (var rel in json['relationships']) {
-        if (rel['type'] == 'cover_art' && rel['attributes'] != null) {
-          final fileName = rel['attributes']['fileName'] ?? '';
-          if (fileName.isNotEmpty) {
-            coverUrl = 'https://uploads.mangadex.org/covers/$id/$fileName.256.jpg';
-          }
-        }
-      }
-    }
-    
-    return Manga(
-      id: id,
-      title: title,
-      status: status,
-      coverUrl: coverUrl,
-      description: description,
-    );
-  }
-}
+ 
 
 class _GenreChip extends StatelessWidget {
   final String label;

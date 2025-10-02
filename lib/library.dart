@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'bookmarks_repository.dart';
+import 'models.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -10,22 +12,21 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   int _selectedFilter = 0;
+  final BookmarksRepository _repo = BookmarksRepository();
+  List<Manga> _bookmarks = [];
 
   final List<String> filters = ['Recently Read', 'Alphabetical', 'Last Updated'];
 
-  final List<Map<String, String>> mangaList = [
-    {'image': 'assets/naruto.png', 'title': 'The Shadowed Throne'},
-    {'image': 'assets/izumi.png', 'title': 'Crimson Echoes'},
-    {'image': 'assets/anya.png', 'title': 'Whispers of the Past'},
-    {'image': 'assets/izumi.png', 'title': 'Eternal Nightfall'},
-    {'image': 'assets/naruto.png', 'title': 'The Lost Heirloom'},
-    {'image': 'assets/anya.png', 'title': 'Serpent\'s Kiss'},
-  ];
+  Future<void> _load() async {
+    final list = await _repo.loadBookmarks();
+    setState(() => _bookmarks = list);
+  }
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _load();
   }
 
   @override
@@ -87,6 +88,7 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
                     onSelected: (_) {
                       setState(() {
                         _selectedFilter = index;
+                        _sortBookmarks();
                       });
                     },
                   ),
@@ -99,19 +101,37 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
               controller: _tabController,
               children: [
                 // Manga Tab
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: GridView.count(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.7,
-                    mainAxisSpacing: 24,
-                    crossAxisSpacing: 16,
-                    children: mangaList.map((manga) {
-                      return _MangaCard(
-                        image: manga['image']!,
-                        title: manga['title']!,
-                      );
-                    }).toList(),
+                RefreshIndicator(
+                  color: Colors.blueAccent,
+                  backgroundColor: const Color(0xFF23233A),
+                  onRefresh: _load,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: _bookmarks.isEmpty
+                        ? ListView(
+                            children: const [
+                              SizedBox(height: 80),
+                              Center(
+                                child: Text(
+                                  'No bookmarks yet.',
+                                  style: TextStyle(color: Colors.white54, fontSize: 16),
+                                ),
+                              ),
+                            ],
+                          )
+                        : GridView.builder(
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              childAspectRatio: 0.7,
+                              mainAxisSpacing: 24,
+                              crossAxisSpacing: 16,
+                            ),
+                            itemCount: _bookmarks.length,
+                            itemBuilder: (context, index) {
+                              final m = _bookmarks[index];
+                              return _BookmarkCard(manga: m);
+                            },
+                          ),
                   ),
                 ),
                 // Novels Tab (empty for now)
@@ -128,13 +148,27 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
       ),
     );
   }
+
+  void _sortBookmarks() {
+    if (_bookmarks.isEmpty) return;
+    switch (_selectedFilter) {
+      case 0:
+        // Recently Read placeholder: keep insertion order
+        break;
+      case 1:
+        _bookmarks.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        break;
+      case 2:
+        // Last Updated placeholder: no data yet, keep order
+        break;
+    }
+  }
 }
 
-class _MangaCard extends StatelessWidget {
-  final String image;
-  final String title;
+class _BookmarkCard extends StatelessWidget {
+  final Manga manga;
 
-  const _MangaCard({required this.image, required this.title});
+  const _BookmarkCard({required this.manga});
 
   @override
   Widget build(BuildContext context) {
@@ -143,16 +177,24 @@ class _MangaCard extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: Image.asset(
-            image,
-            height: 140,
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
+          child: manga.coverUrl.isNotEmpty
+              ? Image.network(
+                  manga.coverUrl,
+                  height: 140,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                )
+              : Container(
+                  height: 140,
+                  color: const Color(0xFF23233A),
+                  child: const Center(
+                    child: Icon(Icons.book, color: Colors.white54, size: 32),
+                  ),
+                ),
         ),
         const SizedBox(height: 12),
         Text(
-          title,
+          manga.title,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 16,
