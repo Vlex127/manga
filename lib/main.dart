@@ -850,64 +850,7 @@ class _MangaDetailsScreenState extends State<MangaDetailsScreen> {
   }
 }
 
-class Manga {
-  final String id;
-  final String title;
-  final String status;
-  final String coverUrl;
-  final String description;
-
-  Manga({
-    required this.id,
-    required this.title,
-    required this.status,
-    required this.coverUrl,
-    required this.description,
-  });
-
-  factory Manga.fromJson(Map<String, dynamic> json) {
-    final id = json['id'] as String;
-    final attributes = json['attributes'] ?? {};
-    final titleMap = attributes['title'] ?? {};
-    
-    String title = 'No Title';
-    if (titleMap.containsKey('en')) {
-      title = titleMap['en'];
-    } else if (titleMap.values.isNotEmpty) {
-      title = titleMap.values.first;
-    }
-    
-    final status = attributes['status'] ?? 'Unknown';
-    
-    final descMap = attributes['description'] ?? {};
-    String description = '';
-    if (descMap.containsKey('en')) {
-      description = descMap['en'];
-    } else if (descMap.values.isNotEmpty) {
-      description = descMap.values.first;
-    }
-    
-    String coverUrl = '';
-    if (json['relationships'] != null) {
-      for (var rel in json['relationships']) {
-        if (rel['type'] == 'cover_art' && rel['attributes'] != null) {
-          final fileName = rel['attributes']['fileName'] ?? '';
-          if (fileName.isNotEmpty) {
-            coverUrl = 'https://uploads.mangadex.org/covers/$id/$fileName.256.jpg';
-          }
-        }
-      }
-    }
-    
-    return Manga(
-      id: id,
-      title: title,
-      status: status,
-      coverUrl: coverUrl,
-      description: description,
-    );
-  }
-}
+ 
 
 class _GenreChip extends StatelessWidget {
   final String label;
